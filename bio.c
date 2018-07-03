@@ -19,12 +19,12 @@
 //     and needs to be written to disk.
 
 #include "types.h"
-#include "defs.h"
 #include "param.h"
 #include "spinlock.h"
 #include "sleeplock.h"
 #include "fs.h"
 #include "buf.h"
+#include "defs.h"
 
 struct {
   struct spinlock lock;
@@ -98,6 +98,17 @@ bget(uint dev, uint blockno)
 void
 write_page_to_disk(uint dev, char *pg, uint blk)
 {
+	cprintf("write_page_to_disk\n");	
+	int i=0;
+	for(;i<8;i++){
+		struct buf* bp=bget(dev,blk+i);
+		begin_op();
+		memmove(bp->data,pg+(i*512),512);
+		//bwrite(bp);
+		log_write(bp);
+		brelse(bp);
+		end_op();
+	}
 }
 
 /* Read 4096 bytes from the eight consecutive
@@ -106,18 +117,28 @@ write_page_to_disk(uint dev, char *pg, uint blk)
 void
 read_page_from_disk(uint dev, char *pg, uint blk)
 {
+	cprintf("Inside read_page_from_disk\n");	
+	int i=0;
+	for(;i<8;i++){
+		struct buf* bp = bread(dev,blk+i);
+		memmove(pg+(i*512),bp->data,512);
+	}
 }
 
 // Return a locked buf with the contents of the indicated block.
 struct buf*
 bread(uint dev, uint blockno)
 {
-  struct buf *b;
+  
+cprintf("Inside bread\n");
+struct buf *b;
 
   b = bget(dev, blockno);
+ //cprintf("%d %d",b->flags,B_VALID);
   if((b->flags & B_VALID) == 0) {
     iderw(b);
   }
+ //cprintf("Done");
   return b;
 }
 
@@ -125,7 +146,8 @@ bread(uint dev, uint blockno)
 void
 bwrite(struct buf *b)
 {
-  if(!holdingsleep(&b->lock))
+cprintf("Inside bwrite\n");  
+if(!holdingsleep(&b->lock))
     panic("bwrite");
   b->flags |= B_DIRTY;
   iderw(b);
@@ -136,7 +158,8 @@ bwrite(struct buf *b)
 void
 brelse(struct buf *b)
 {
-  if(!holdingsleep(&b->lock))
+cprintf("Inside brelse\n");  
+if(!holdingsleep(&b->lock))
     panic("brelse");
 	
   releasesleep(&b->lock);

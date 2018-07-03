@@ -13,6 +13,7 @@ char name[3];
 char *echoargv[] = { "echo", "ALL", "TESTS", "PASSED", 0 };
 int stdout = 1;
 #define TOTAL_MEMORY (1 << 20) + (1 << 18)
+//#define TOTAL_MEMORY (1<<16)
 
 void
 mem(void)
@@ -58,6 +59,7 @@ mem(void)
 	pid = fork();
 
 	if (pid == 0){
+		
 		count = 0;
 		m1 = start;
 	
@@ -67,6 +69,7 @@ mem(void)
 			m1 = *(char**)m1;
 			count++;
 		}
+		printf(1,"Child");
 		exit();
 	}
 	else if (pid < 0)

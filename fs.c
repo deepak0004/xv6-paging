@@ -10,7 +10,6 @@
 // are in sysfile.c.
 
 #include "types.h"
-#include "defs.h"
 #include "param.h"
 #include "stat.h"
 #include "mmu.h"
@@ -20,6 +19,7 @@
 #include "fs.h"
 #include "buf.h"
 #include "file.h"
+#include "defs.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 static void itrunc(struct inode*);
@@ -43,12 +43,15 @@ readsb(int dev, struct superblock *sb)
 static void
 bzero(int dev, int bno)
 {
+  cprintf("In bzero");
   struct buf *bp;
 
   bp = bread(dev, bno);
   memset(bp->data, 0, BSIZE);
+  //begin_op();
   log_write(bp);
   brelse(bp);
+  //end_op();
 }
 
 // Blocks.
@@ -66,10 +69,13 @@ balloc(uint dev)
     for(bi = 0; bi < BPB && b + bi < sb.size; bi++){
       m = 1 << (bi % 8);
       if((bp->data[bi/8] & m) == 0){  // Is block free?
-        bp->data[bi/8] |= m;  // Mark block in use.
-        log_write(bp);
-        brelse(bp);
-        bzero(dev, b + bi);
+	//begin_op();        
+	bp->data[bi/8] |= m;  // Mark block in use.
+	//begin_op();        
+	log_write(bp);
+        brelse(bp);bzero(dev, b + bi);
+	//end_op();
+        
         return b + bi;
       }
     }
@@ -85,20 +91,93 @@ balloc(uint dev)
 uint
 balloc_page(uint dev)
 {
+	cprintf("In balloc_page\n");	
+	int b,bi,m;
+	struct buf *bp;
+	bp = 0;
+	for(b=0;b<sb.size; b+=BPB){
+		bp = bread(dev,BBLOCK(b,sb));
+		for(bi = 0; bi<BPB && b+bi<sb.size;bi+=8){
+			
+			int ci;
+			for(ci=bi;ci<bi+8;ci++){
+				m = 1 << (ci % 8);
+				if(((bp->data[ci/8])&m) == 1){
+					break;
+				}
+			}
+			if(ci==bi+8){
+				/*begin_op();
+				bp->data[bi] |=m;
+				log_write(bp);
+				brelse(bp);
+				bzero(dev,b+bi);
+				end_op();*/
+				for(ci=bi;ci<bi+8;ci++){
+					m = 1 << (ci % 8);
+					begin_op();
+					bp->data[ci/8] |=m;
+					log_write(bp);
+					brelse(bp);
+					bzero(dev,b+ci);
+					end_op();
+				}
+				numallocblocks+=8;
+				return b + bi; 
+			}
+		}
+		brelse(bp);
+	}
+	panic("balloc_page: out of blocks");
 	return -1;
 }
-
 /* Free disk blocks allocated using balloc_page.
  */
 void
 bfree_page(int dev, uint b)
 {
+	cprintf("In bfree_page\n");	
+	struct buf *bp;
+	int bi,ci,m;
+
+	readsb(dev,&sb);
+	bp = bread(dev,BBLOCK(b,sb));
+	bi = b % BPB;
+	
+	for(ci=bi;ci<bi+8;ci++){
+		m=1<<(ci%8);
+		if((bp->data[ci/8] & m)==1){
+			break;
+		}
+	}
+	if(ci==bi+8){
+		for(ci=bi;ci<bi+8;ci++){
+			m=1<<(ci%8);
+			begin_op();
+			bp->data[ci/8] &= ~m;
+			log_write(bp);
+			brelse(bp);
+			end_op();
+			numallocblocks-=8;
+		}
+	}
+	/*m=0xff;
+	if(bp->data[bi]!=m){
+		panic("Already Freed");
+	}
+	begin_op();
+	bp->data[bi] = 0;
+	log_write(bp);
+	brelse(bp);
+	end_op();
+	numallocblocks-=8;*/
 }
 
 // Free a disk block.
 static void
 bfree(int dev, uint b)
 {
+  cprintf("In bfree");
   struct buf *bp;
   int bi, m;
 
@@ -109,8 +188,10 @@ bfree(int dev, uint b)
   if((bp->data[bi/8] & m) == 0)
     panic("freeing free block");
   bp->data[bi/8] &= ~m;
+  //begin_op();
   log_write(bp);
   brelse(bp);
+  //end_op();
 }
 
 // Inodes.
@@ -223,8 +304,10 @@ ialloc(uint dev, short type)
     if(dip->type == 0){  // a free inode
       memset(dip, 0, sizeof(*dip));
       dip->type = type;
+      //begin_op();
       log_write(bp);   // mark it allocated on the disk
       brelse(bp);
+      //end_op();
       return iget(dev, inum);
     }
     brelse(bp);
@@ -250,8 +333,10 @@ iupdate(struct inode *ip)
   dip->nlink = ip->nlink;
   dip->size = ip->size;
   memmove(dip->addrs, ip->addrs, sizeof(ip->addrs));
+  //begin_op();
   log_write(bp);
   brelse(bp);
+  //end_op();
 }
 
 // Find the inode with number inum on device dev
@@ -409,7 +494,9 @@ bmap(struct inode *ip, uint bn)
     a = (uint*)bp->data;
     if((addr = a[bn]) == 0){
       a[bn] = addr = balloc(ip->dev);
+      //begin_op();
       log_write(bp);
+      //end_op();
     }
     brelse(bp);
     return addr;
@@ -518,8 +605,10 @@ writei(struct inode *ip, char *src, uint off, uint n)
     bp = bread(ip->dev, bmap(ip, off/BSIZE));
     m = min(n - tot, BSIZE - off%BSIZE);
     memmove(bp->data + off%BSIZE, src, m);
+    //begin_op();
     log_write(bp);
     brelse(bp);
+    //end_op();
   }
 
   if(n > 0 && off > ip->size){

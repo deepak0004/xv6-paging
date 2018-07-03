@@ -188,3 +188,16 @@ void            clearpteu(pde_t *pgdir, char *uva);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+
+#define swap_bit (((uint)1<<9))
+#define set_swapped(x) ((x)=((uint)(x)|swap_bit)) 
+#define clear_swap(x) ((x) = ((uint)(x) & ~(swap_bit)))
+#define clear_access(x) ((x) = ((uint)(x) & ~(PTE_A)))
+#define swapped(x) ((uint)(x) & swap_bit)
+#define clear_present(x) ((x) = ((uint)(x) & ~(PTE_P)))
+#define set_present(x) ((x) = ((uint)(x) |(PTE_P)))
+#define SWAPPING_DISK ROOTDEV
+static inline uint get_swapped_block_id(const uint *pte)
+{
+	return (*pte)/(1<<12);
+}

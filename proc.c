@@ -179,6 +179,7 @@ fork(void)
 
   // Allocate process.
   if((np = allocproc()) == 0){
+    cprintf("allocate process");
     return -1;
   }
 
@@ -187,6 +188,7 @@ fork(void)
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
+    cprintf("Copy process state from proc");
     return -1;
   }
   np->sz = curproc->sz;

@@ -461,9 +461,35 @@ int
 sys_swap(void)
 {
   uint addr;
-
-  if(argint(0, (int*)&addr) < 0)
+  pte_t *pte;
+  pde_t *pde;
+  pde_t *pgdir;
+ if(argint(0, (int*)&addr) < 0)
     return -1;
-  // swap addr
-  return 0;
+  struct proc *curproc = myproc();
+  pgdir = curproc->pgdir;
+  pte = uva2pte(pgdir, addr);
+  if(pte==0)
+  {
+   pde = &pgdir[PDX(addr)];
+   if(swapped(*pde))
+	{
+		
+	}
+	else
+		return 0;
+	
+  }
+  if(*pte&PTE_P)
+  {
+		swap_page_from_pte(pte);
+	} 
+ else
+	return 0;
+ asm volatile("": : :"memory");
+  switchuvm(curproc);
+   return 0;
+
+  
+  
 }
